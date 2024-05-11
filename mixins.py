@@ -1,59 +1,59 @@
-from django.core import checks
+import sys
 
-NOT_PROVIDED = object()
-
-
-class FieldCacheMixin:
-    """Provide an API for working with the model's fields value cache."""
-
-    def get_cache_name(self):
-        raise NotImplementedError
-
-    def get_cached_value(self, instance, default=NOT_PROVIDED):
-        cache_name = self.get_cache_name()
-        try:
-            return instance._state.fields_cache[cache_name]
-        except KeyError:
-            if default is NOT_PROVIDED:
-                raise
-            return default
-
-    def is_cached(self, instance):
-        return self.get_cache_name() in instance._state.fields_cache
-
-    def set_cached_value(self, instance, value):
-        instance._state.fields_cache[self.get_cache_name()] = value
-
-    def delete_cached_value(self, instance):
-        del instance._state.fields_cache[self.get_cache_name()]
+from django.db.models.fields import DecimalField, FloatField, IntegerField
+from django.db.models.functions import Cast
 
 
-class CheckFieldDefaultMixin:
-    _default_hint = ("<valid default>", "<invalid default>")
-
-    def _check_default(self):
-        if (
-            self.has_default()
-            and self.default is not None
-            and not callable(self.default)
-        ):
-            return [
-                checks.Warning(
-                    "%s default should be a callable instead of an instance "
-                    "so that it's not shared between all field instances."
-                    % (self.__class__.__name__,),
-                    hint=(
-                        "Use a callable instead, e.g., use `%s` instead of "
-                        "`%s`." % self._default_hint
-                    ),
-                    obj=self,
-                    id="fields.E010",
+class FixDecimalInputMixin:
+    def as_postgresql(self, compiler, connection, **extra_context):
+        # Cast FloatField to DecimalField as PostgreSQL doesn't support the
+        # following function signatures:
+        # - LOG(double, double)
+        # - MOD(double, double)
+        output_field = DecimalField(decimal_places=sys.float_info.dig, max_digits=1000)
+        clone = self.copy()
+        clone.set_source_expressions(
+            [
+                (
+                    Cast(expression, output_field)
+                    if isinstance(expression.output_field, FloatField)
+                    else expression
                 )
+                for expression in self.get_source_expressions()
             ]
-        else:
-            return []
+        )
+        return clone.as_sql(compiler, connection, **extra_context)
 
-    def check(self, **kwargs):
-        errors = super().check(**kwargs)
-        errors.extend(self._check_default())
-        return errors
+
+class FixDurationInputMixin:
+    def as_mysql(self, compiler, connection, **extra_context):
+        sql, params = super().as_sql(compiler, connection, **extra_context)
+        if self.output_field.get_internal_type() == "DurationField":
+            sql = "CAST(%s AS SIGNED)" % sql
+        return sql, params
+
+    def as_oracle(self, compiler, connection, **extra_context):
+        if self.output_field.get_internal_type() == "DurationField":
+            expression = self.get_source_expressions()[0]
+            options = self._get_repr_options()
+            from django.db.backends.oracle.functions import (
+                IntervalToSeconds,
+                SecondsToInterval,
+            )
+
+            return compiler.compile(
+                SecondsToInterval(
+                    self.__class__(IntervalToSeconds(expression), **options)
+                )
+            )
+        return super().as_sql(compiler, connection, **extra_context)
+
+
+class NumericOutputFieldMixin:
+    def _resolve_output_field(self):
+        source_fields = self.get_source_fields()
+        if any(isinstance(s, DecimalField) for s in source_fields):
+            return DecimalField()
+        if any(isinstance(s, IntegerField) for s in source_fields):
+            return FloatField()
+        return super()._resolve_output_field() if source_fields else FloatField()
