@@ -1,6 +1,10 @@
 from django.apps import AppConfig
 
 
-class PerabotanConfig(AppConfig):
-    default_auto_field = 'django.db.models.BigAutoField'
-    name = 'perabotan'
+class RestFrameworkConfig(AppConfig):
+    name = 'rest_framework'
+    verbose_name = "Django REST framework"
+
+    def ready(self):
+        # Add System checks
+        from .checks import pagination_system_check  # NOQA
