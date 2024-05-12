@@ -1,13 +1,12 @@
 from django.contrib import admin
 from django.urls import path
-from . import views
+from . import views  # Import views from your perabotan app
 
 urlpatterns = [
-    path('api/products/', views.ProductList.as_view(), name='product-list'),
-    path('api/products/<int:pk>/', views.ProductDetail.as_view(), name='product-detail'),
-    path('api/transactions/', views.TransactionList.as_view(), name='transaction-list'),
-    path('api/transactions/<int:pk>/', views.TransactionDetail.as_view(), name='transaction-detail'),
+  path('', views.PerabotList.as_view(), name='perabotan-list'),  # List all furniture
+  path('<int:pk>/', views.PerabotDetail.as_view(), name='perabotan-detail'),  # Detail view for specific furniture (by ID)
 ]
+
 
 urlpatterns = [
     path('admin/', admin.site.urls),
