@@ -1,65 +1,49 @@
-from rest_framework.views import APIView
+from django.shortcuts import render
+from rest_framework import status
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticatedOrReadOnly  # Opsional: Hanya user terautentikasi yang bisa edit/hapus
+from rest_framework.decorators import api_view
+from .models import Perabotan
+from .serializers import PerabotanSerializer
 
-from .models import Perabot
-from .serializers import PerabotSerializer, PerabotDetailSerializer
+@api_view(['GET', 'POST'])
+def perabotan_list(request):
+    """
+    List semua perabotan atau buat perabotan baru.
+    """
+    if request.method == 'GET':
+        perabotan = Perabotan.objects.all()
+        serializer = PerabotanSerializer(perabotan, many=True)
+        return Response(serializer.data)
 
-class PerabotList(APIView):
-  """List dan create perabotan."""
+    elif request.method == 'POST':
+        serializer = PerabotanSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-  permission_classes = [IsAuthenticatedOrReadOnly]  # Opsional: Hanya user terautentikasi yang bisa create
-
-  def get(self, request):
-    """Menampilkan daftar perabotan."""
-    perabotan = Perabot.objects.all()
-    serializer = PerabotSerializer(perabotan, many=True)
-    return Response(serializer.data)
-
-  def post(self, request):
-    """Membuat perabotan baru."""
-    serializer = PerabotSerializer(data=request.data)
-    if serializer.is_valid():
-      serializer.save()
-      return Response(serializer.data, status=201)  # Created
-    return Response(serializer.errors, status=400)  # Bad Request
-
-class PerabotDetail(APIView):
-  """Detail, update, dan delete perabotan."""
-
-  permission_classes = [IsAuthenticatedOrReadOnly]  # Opsional: Hanya user terautentikasi yang bisa edit/hapus
-
-  def get_object(self, pk):
-    """Mendapatkan objek perabotan berdasarkan ID."""
+@api_view(['GET', 'PUT', 'DELETE'])
+def perabotan_detail(request, pk):
+    """
+    Retrieve, update or delete a perabotan instance.
+    """
     try:
-      return Perabot.objects.get(pk=pk)
-    except Perabot.DoesNotExist:
-      return None
+        perabotan = Perabotan.objects.get(pk=pk)
+    except Perabotan.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
 
-  def get(self, request, pk):
-    """Menampilkan detail perabotan."""
-    perabot = self.get_object(pk)
-    if not perabot:
-      return Response(status=404)  # Not Found
-    serializer = PerabotDetailSerializer(perabot, context={'request': request})  # Tambahkan request untuk URL absolut
-    return Response(serializer.data)
+    if request.method == 'GET':
+        serializer = PerabotanSerializer(perabotan)
+        return Response(serializer.data)
 
-  def put(self, request, pk):
-    """Update perabotan."""
-    perabot = self.get_object(pk)
-    if not perabot:
-      return Response(status=404)  # Not Found
-    serializer = PerabotDetailSerializer(perabot, data=request.data, context={'request': request})
-    if serializer.is_valid():
-      serializer.save()
-      return Response(serializer.data)
-    return Response(serializer.errors, status=400)  # Bad Request
+    elif request.method == 'PUT':
+        serializer = PerabotanSerializer(perabotan, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-  def delete(self, request, pk):
-    """Hapus perabotan."""
-    perabot = self.get_object(pk)
-    if not perabot:
-      return Response(status=404)  # Not Found
-    perabot.delete()
-    return Response(status=204)  # No Content
+    elif request.method == 'DELETE':
+        perabotan.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
